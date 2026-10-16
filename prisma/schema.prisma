@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PRISMA_DATABASE_URL")
+}
+
+enum AssetSymbol {
+  NIMB
+  GNIMB
+}
+
+enum Blockchain {
+  BSC
+  BASE
+}
+
+enum UserStatus {
+  VERIFIED
+  UNVERIFIED
+  SUSPENDED
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum BridgeRequestStatus {
+  PROCESSED
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum BridgeTransferStatus {
+  COMPLETED
+  PROCESSING
+  PENDING
+  FAILED
+}
+
+model Asset {
+  id              String          @id @default(uuid())
+  contractAddress String          @unique @map("contract_address")
+  symbol          AssetSymbol     @map("symbol")
+  decimals        Int
+  priceInUsd      Decimal         @map("price_in_usd") @db.Decimal(36, 18)
+  blockchain      Blockchain      @map("blockchain")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  requests        BridgeRequest[]
+
+  @@map("assets")
+}
+
+model User {
+  id            String          @id @default(uuid())
+  walletAddress String          @unique @map("wallet_address")
+  status        UserStatus      @default(UNVERIFIED) @map("status")
+  role          UserRole        @default(USER) @map("role")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  requests      BridgeRequest[]
+  sessions      UserSession[]
+
+  @@map("users")
+}
+
+model AuthNonce {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  nonce          String   @default(uuid())
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  adminSessionId String?
+
+  @@map("auth_nonces")
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  accessToken  String   @unique @map("access_token")
+  refreshToken String   @unique @map("refresh_token")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model BlockchainState {
+  id                   String     @id @default(uuid())
+  processedBlockNumber BigInt     @map("processed_block_number")
+  blockchain           Blockchain @unique @map("blockchain")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+
+  @@map("blockchain_states")
+}
+
+model BridgeRequest {
+  id             String              @id @default(uuid())
+  userId         String              @map("user_id")
+  assetId        String              @map("asset_id")
+  amount         Decimal             @map("amount") @db.Decimal(36, 18)
+  toAddress      String              @map("to_address")
+  fromBlockchain Blockchain          @map("from_blockchain")
+  toBlockchain   Blockchain          @map("to_blockchain")
+  exchangeRate   Decimal             @map("exchange_rate") @db.Decimal(36, 18)
+  txHash         String              @unique @map("tx_hash")
+  status         BridgeRequestStatus @default(PENDING)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset          Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  transfer       BridgeTransfer?
+
+  @@map("bridge_requests")
+}
+
+model BridgeTransfer {
+  id        String               @id @default(uuid())
+  requestId String               @unique @map("request_id")
+  amount    Decimal              @db.Decimal(36, 18)
+  txHash    String?              @map("tx_hash")
+  status    BridgeTransferStatus @default(PENDING)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  request   BridgeRequest        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("bridge_transfers")
+}
